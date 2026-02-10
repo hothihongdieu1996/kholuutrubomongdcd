@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TRƯỜNG THCS HUỲNH THÚC KHÁNG - MÔN: GDCD</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header>
+        <div class="header-content">
+            <h1><i class="fa-solid fa-school"></i> THCS HUỲNH THÚC KHÁNG</h1>
+            <p>Cổng thông tin tư liệu học tập & Thư viện số</p>
+        </div>
+        
+        <div class="header-right">
+            <div class="auth-buttons" id="auth-buttons">
+                <button class="btn-auth" onclick="openModal('login')"><i class="fa-solid fa-right-to-bracket"></i> Đăng nhập</button>
+                <button class="btn-auth btn-register" onclick="openModal('register')">Đăng ký</button>
+            </div>
+
+            <div class="user-info" id="user-logged-in">
+                <div class="avatar"><i class="fa-solid fa-user-graduate"></i></div>
+                <div class="user-details">
+                    <span class="welcome-text">Xin chào,</span>
+                    <span id="user-name-display">Học Sinh</span>
+                </div>
+                <button class="btn-logout" onclick="logout()" title="Đăng xuất"><i class="fa-solid fa-power-off"></i></button>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        
+        <div id="view-home" class="view-section active-view">
+            <div class="hero-banner">
+                <h2 class="view-title">Chào mừng đến với thư viện học tập</h2>
+                <p>Vui lòng chọn Khối Lớp để truy cập tài liệu</p>
+            </div>
+
+            <div class="selection-grid grade-grid">
+                <div class="card-item grade-card grade-6" onclick="goToGradeMenu(6)">
+                    <div class="card-bg-icon">6</div>
+                    <span class="card-icon"><i class="fa-solid fa-seedling"></i></span>
+                    <span class="card-title">KHỐI LỚP 6</span>
+                    <span class="card-subtitle">Khởi đầu hành trình</span>
+                </div>
+                <div class="card-item grade-card grade-7" onclick="goToGradeMenu(7)">
+                    <div class="card-bg-icon">7</div>
+                    <span class="card-icon"><i class="fa-solid fa-book-open-reader"></i></span>
+                    <span class="card-title">KHỐI LỚP 7</span>
+                    <span class="card-subtitle">Khám phá tri thức</span>
+                </div>
+                <div class="card-item grade-card grade-8" onclick="goToGradeMenu(8)">
+                    <div class="card-bg-icon">8</div>
+                    <span class="card-icon"><i class="fa-solid fa-flask"></i></span>
+                    <span class="card-title">KHỐI LỚP 8</span>
+                    <span class="card-subtitle">Tăng tốc tư duy</span>
+                </div>
+                <div class="card-item grade-card grade-9" onclick="goToGradeMenu(9)">
+                    <div class="card-bg-icon">9</div>
+                    <span class="card-icon"><i class="fa-solid fa-graduation-cap"></i></span>
+                    <span class="card-title">KHỐI LỚP 9</span>
+                    <span class="card-subtitle">Vững bước tương lai</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-grade-menu" class="view-section">
+            <button class="btn-back" onclick="goToHome()">
+                <i class="fa-solid fa-arrow-left"></i> Quay lại Trang chủ
+            </button>
+            
+            <h2 id="grade-title" class="page-title"></h2>
+            
+            <div class="selection-grid menu-grid">
+                
+                <div class="card-item menu-card" onclick="goToMediaDetail('image')">
+                    <span class="card-icon img-icon"><i class="fa-regular fa-images"></i></span>
+                    <span class="card-title">Thư viện Hình ảnh</span>
+                    <p>Truy cập kho ảnh hoạt động, sự kiện và tư liệu học tập của khối.</p>
+                </div>
+
+                <div class="card-item menu-card" onclick="goToMediaDetail('video')">
+                    <span class="card-icon vid-icon"><i class="fa-solid fa-clapperboard"></i></span>
+                    <span class="card-title">Video Tư liệu</span>
+                    <p>Xem các video bài giảng, video tư liệu và hoạt động của khối.</p>
+                </div>
+
+            </div>
+        </div>
+
+        <div id="view-media-detail" class="view-section">
+            <div class="media-header">
+                <button class="btn-back" onclick="backToGradeMenu()">
+                    <i class="fa-solid fa-arrow-left"></i> Quay lại Menu
+                </button>
+                <h2 id="media-page-title" class="page-title"></h2>
+            </div>
+
+            <div id="admin-toolbar" class="admin-toolbar" style="display: none;">
+                <div class="toolbar-left">
+                    <input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll()">
+                    <label for="select-all-checkbox">Chọn tất cả</label>
+                </div>
+                <button class="btn-bulk-delete" onclick="deleteSelectedItems()">
+                    <i class="fa-solid fa-trash-can"></i> Xóa (<span id="selected-count">0</span>) mục
+                </button>
+            </div>
+            <div class="upload-section">
+                <div class="upload-content">
+                    <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+                    <div>
+                        <h3>Chia sẻ tài liệu</h3>
+                        <p class="upload-instruction">Chọn nhiều Hình ảnh/Video để tải lên cùng lúc.</p>
+                    </div>
+                </div>
+                <div class="upload-actions">
+                    <button class="btn-upload" onclick="triggerUpload()">
+                        <i class="fa-solid fa-plus"></i> Tải lên <span id="upload-type-text">File</span>
+                    </button>
+                    <input type="file" id="file-input" multiple onchange="handleFileUpload(this)">
+                </div>
+            </div>
+
+            <div class="section-divider">
+                <h3><i class="fa-solid fa-bolt" style="color: #f59e0b;"></i> Vừa mới đăng (24h qua)</h3>
+            </div>
+            <div id="latest-container" class="media-gallery" style="margin-bottom: 40px;">
+                </div>
+
+            <div class="section-header-row">
+                <div class="section-divider" style="margin:0;">
+                    <h3><i class="fa-solid fa-layer-group" style="color: #2563eb;"></i> Tất cả kho lưu trữ</h3>
+                </div>
+                
+                <div class="sort-container">
+                    <label><i class="fa-solid fa-filter"></i> Sắp xếp:</label>
+                    <select id="sort-select" onchange="renderGallery()">
+                        <option value="newest">Mới nhất trước</option>
+                        <option value="oldest">Cũ nhất trước</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="gallery-container" class="media-gallery">
+                </div>
+        </div>
+
+    </div>
+
+    <div id="modal-login" class="modal-overlay">
+        <div class="modal-box">
+            <span class="modal-close" onclick="closeModal('login')">&times;</span>
+            <div class="modal-header">
+                <i class="fa-solid fa-circle-user"></i>
+                <h2 class="modal-title">Đăng Nhập</h2>
+            </div>
+            <div class="form-group">
+                <label>Email / Tên đăng nhập</label>
+                <div class="input-with-icon">
+                    <i class="fa-solid fa-envelope"></i>
+                    <input type="text" id="login-user" placeholder="Nhập email...">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Mật khẩu</label>
+                <div class="input-with-icon">
+                    <i class="fa-solid fa-lock"></i>
+                    <input type="password" placeholder="Nhập mật khẩu...">
+                </div>
+            </div>
+            <button class="btn-submit" onclick="performLogin()">Đăng Nhập Ngay</button>
+            <div class="modal-footer">
+                Chưa có tài khoản? <span class="link-text" onclick="switchModal('login', 'register')">Đăng ký mới</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-register" class="modal-overlay">
+        <div class="modal-box">
+            <span class="modal-close" onclick="closeModal('register')">&times;</span>
+            <div class="modal-header">
+                <i class="fa-solid fa-user-plus"></i>
+                <h2 class="modal-title">Tạo Tài Khoản</h2>
+            </div>
+            
+            <div class="form-group">
+                <label>Họ và tên</label>
+                <input type="text" id="reg-name" placeholder="Ví dụ: Nguyễn Văn A">
+            </div>
+            
+            <div class="form-group">
+                <label>Bạn học khối nào?</label>
+                <select id="reg-grade">
+                    <option value="6">Khối 6</option>
+                    <option value="7">Khối 7</option>
+                    <option value="8">Khối 8</option>
+                    <option value="9">Khối 9</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="reg-email" placeholder="email@example.com">
+            </div>
+            <div class="form-group">
+                <label>Mật khẩu</label>
+                <input type="password" id="reg-password" placeholder="Tự tạo mật khẩu...">
+            </div>
+            
+            <button class="btn-submit" onclick="performRegister()">Hoàn Tất Đăng Ký</button>
+            <div class="modal-footer">
+                Đã có tài khoản? <span class="link-text" onclick="switchModal('register', 'login')">Đăng nhập</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="lightbox-modal" class="lightbox">
+        <span class="close-btn" onclick="closeLightbox()">&times;</span>
+        <a class="prev" onclick="changeSlide(-1)">&#10094;</a>
+        <a class="next" onclick="changeSlide(1)">&#10095;</a>
+        <img class="lightbox-content" id="lightbox-img">
+        <div id="lightbox-caption"></div>
+    </div>
+
+    <footer>
+        <p>&copy; 2026 <strong>Trường THCS Huỳnh Thúc Kháng</strong>. Nền tảng học tập số.</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
