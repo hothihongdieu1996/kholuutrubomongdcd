@@ -523,3 +523,76 @@ footer {
     border: 3px solid #dc2626; /* Viền đỏ bao quanh */
     transform: scale(0.98);
 }
+
+/* ... (Code cũ của bạn giữ nguyên) ... */
+
+/* GIAO DIỆN CHỌN LỚP (MỚI) */
+.class-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 15px;
+    padding-top: 10px;
+}
+
+.class-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px 10px;
+    text-align: center;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    border: 1px solid #eee;
+    font-weight: 700;
+    color: var(--primary-dark);
+    transition: 0.2s;
+    min-height: 80px;
+    display: flex; align-items: center; justify-content: center;
+}
+.class-card:hover {
+    background: var(--primary);
+    color: white;
+    transform: translateY(-3px);
+}
+
+/* Thẻ Giáo viên */
+.teacher-card {
+    grid-column: 1 / -1; /* Full width */
+    background: #fff7ed;
+    color: #d97706;
+    border: 2px solid #ffedd5;
+    font-size: 1.2rem;
+}
+.teacher-card:hover {
+    background: #d97706;
+    color: white;
+    border-color: #d97706;
+}
+
+/* GIAO DIỆN ẢNH BỊ KHÓA (RIÊNG TƯ) */
+.locked-content {
+    width: 100%;
+    height: 220px;
+    background: #f3f4f6; /* Màu xám */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+    cursor: not-allowed;
+}
+.locked-content i {
+    font-size: 3rem;
+    margin-bottom: 10px;
+}
+.locked-content span {
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+/* Hiển thị tên người đăng */
+.author-name {
+    font-size: 0.8rem;
+    color: var(--primary);
+    font-weight: 700;
+    margin-top: 2px;
+}
