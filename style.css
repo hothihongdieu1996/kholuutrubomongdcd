@@ -595,4 +595,26 @@ footer {
     color: var(--primary);
     font-weight: 700;
     margin-top: 2px;
+
+}
+
+/* Nút xóa từng ảnh (Dành cho chính chủ) */
+.btn-delete-item {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(220, 38, 38, 0.85); /* Màu đỏ */
+    color: white;
+    border: none;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 50; /* Nằm trên cùng */
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+.btn-delete-item:hover {
+    background: #dc2626;
+    transform: scale(1.1);
 }
