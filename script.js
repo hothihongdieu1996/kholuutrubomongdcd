@@ -1,5 +1,5 @@
 /* =========================================
-   SCRIPT.JS - PHIÊN BẢN BẢO MẬT & RIÊNG TƯ
+   SCRIPT.JS - PHIÊN BẢN HỌC SINH TỰ XÓA BÀI
    ========================================= */
 
 // ⚠️ THAY API CỦA BẠN VÀO ĐÂY
@@ -12,15 +12,17 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let currentGrade = 0;
 let currentClass = '';
 let currentMediaType = '';
-let currentUser = null; // Chứa thông tin: id, email, grade, username
+let currentUser = null; 
 let isAdmin = false; 
 let selectedFileIds = [];
 let galleryData = []; 
 let currentImageIndex = 0;
 
 /* --- 1. AUTH & KHỞI TẠO --- */
-
 document.addEventListener("DOMContentLoaded", async () => {
+    if (typeof supabase === 'undefined') {
+        alert("Lỗi: Thư viện Supabase chưa tải được. Vui lòng F5!"); return;
+    }
     const { data: { session } } = await db.auth.getSession();
     if (session) handleUserLogin(session.user);
     else handleUserLogout();
@@ -29,56 +31,35 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (event === 'SIGNED_IN' && session) handleUserLogin(session.user);
         else if (event === 'SIGNED_OUT') handleUserLogout();
     });
-
     loadStateFromURL();
 });
 
 async function handleUserLogin(user) {
-    // Tạm thời gán user cơ bản
-    currentUser = user; 
-    
-    // Lấy thông tin chi tiết (Lớp, Tên) từ bảng profiles
+    currentUser = user;
     await fetchUserProfile(); 
-    
     updateUIForLogin(currentUser.username || currentUser.email);
-    
-    if(document.getElementById('view-gallery').classList.contains('active-view')){
-        renderGallery();
-    }
+    if(document.getElementById('view-gallery').classList.contains('active-view')) renderGallery();
 }
 
 function handleUserLogout() {
     currentUser = null; isAdmin = false;
     updateUIForLogout();
-    if(document.getElementById('view-gallery').classList.contains('active-view')){
-        renderGallery(); 
-    }
+    if(document.getElementById('view-gallery').classList.contains('active-view')) renderGallery();
 }
 
-// Hàm lấy thông tin chi tiết user (Grade, Role, Name)
 async function fetchUserProfile() {
     isAdmin = false;
     try {
         const { data: profile } = await db.from('profiles').select('*').eq('id', currentUser.id).single();
-        
         if (profile) {
-            // Gộp thông tin profile vào biến currentUser để dùng sau này
             currentUser.grade = profile.grade; 
             currentUser.username = profile.username;
             currentUser.role = profile.role;
-
             if (profile.role === 'admin') isAdmin = true;
         }
-
-        // CƯỠNG CHẾ ADMIN (DỰ PHÒNG) - THAY EMAIL CỦA BẠN
-        if (currentUser.email === 'admin@gmail.com') { 
-            isAdmin = true;
-            currentUser.role = 'admin';
-        }
-
+        if (currentUser.email === 'admin@gmail.com') { isAdmin = true; currentUser.role = 'admin'; }
         const suffix = isAdmin ? ' (Admin)' : ` (HS Khối ${currentUser.grade || '?'})`;
         document.getElementById('user-name-display').innerText = (currentUser.username || 'User') + suffix;
-
     } catch (e) { console.error("Lỗi profile:", e); }
 }
 
@@ -91,40 +72,23 @@ function updateUIForLogout() {
     document.getElementById('user-logged-in').style.display = 'none';
 }
 
-/* --- 2. UPLOAD: CHẶN TRÁI TUYẾN & LƯU TÊN --- */
-
+/* --- 2. UPLOAD --- */
 function triggerUpload() { 
-    // KIỂM TRA QUYỀN TRƯỚC KHI MỞ FILE
     if (!currentUser) return alert("Vui lòng đăng nhập!");
-    
-    // 1. Nếu là Admin -> Cho phép hết
-    if (isAdmin) {
-        document.getElementById('file-input').click();
-        return;
+    if (isAdmin) { document.getElementById('file-input').click(); return; }
+    if (parseInt(currentUser.grade) !== parseInt(currentGrade)) {
+        return alert(`Sai khối! Bạn là HS Khối ${currentUser.grade}, không được đăng vào Khối ${currentGrade}.`);
     }
-
-    // 2. Nếu là Học sinh -> Kiểm tra Khối
-    // currentGrade: Khối đang xem (VD: 7)
-    // currentUser.grade: Khối của học sinh (VD: 6)
-    if (currentUser.grade !== currentGrade) {
-        return alert(`CẢNH BÁO: Bạn là Học sinh Khối ${currentUser.grade}, bạn KHÔNG ĐƯỢC PHÉP đăng bài vào khu vực Khối ${currentGrade}!`);
-    }
-
     document.getElementById('file-input').click(); 
 }
 
 async function handleFileUpload(input) {
     if (!input.files || input.files.length === 0) return;
-    
-    // Check lại lần nữa cho chắc (Server side logic giả lập)
-    if (!isAdmin && currentUser.grade !== currentGrade) {
-        alert("Sai khối lớp! Hủy tải lên.");
-        input.value = ''; return;
+    if (!isAdmin && parseInt(currentUser.grade) !== parseInt(currentGrade)) {
+        alert("Sai khối lớp!"); input.value = ''; return;
     }
-    
     if (currentClass === 'teacher' && !isAdmin) {
-        alert("Chỉ Giáo viên (Admin) mới được đăng bài vào mục này!");
-        input.value = ''; return;
+        alert("Chỉ Giáo viên mới được đăng mục này!"); input.value = ''; return;
     }
 
     const files = Array.from(input.files);
@@ -133,8 +97,6 @@ async function handleFileUpload(input) {
     btn.disabled = true;
 
     let successCount = 0;
-    
-    // Lấy tên hiển thị: Tên đăng ký hoặc Email
     const authorName = currentUser.username || currentUser.email.split('@')[0];
 
     for (let i = 0; i < files.length; i++) {
@@ -142,80 +104,52 @@ async function handleFileUpload(input) {
         try {
             const file = files[i];
             const name = `${Date.now()}_${i}_${file.name.replace(/\s/g,'_')}`;
-            
             const { error: upErr } = await db.storage.from('school_assets').upload(name, file);
             if(upErr) throw upErr;
-            
             const { data } = db.storage.from('school_assets').getPublicUrl(name);
-            
             await db.from('media').insert({
-                title: file.name, 
-                url: data.publicUrl, 
-                type: currentMediaType,
-                grade: currentGrade, 
-                class_name: currentClass, 
-                uploader_id: currentUser.id,
-                author_name: authorName // LƯU TÊN NGƯỜI ĐĂNG
+                title: file.name, url: data.publicUrl, type: currentMediaType,
+                grade: currentGrade, class_name: currentClass, uploader_id: currentUser.id, author_name: authorName
             });
             successCount++;
         } catch(e) { console.error(e); }
     }
-
-    alert(`Hoàn tất tải lên ${successCount} file!`);
+    alert(`Đã tải lên ${successCount} file!`);
     btn.innerHTML = oldHTML; btn.disabled = false; input.value = '';
     renderGallery();
 }
 
-/* --- 3. HIỂN THỊ: Ổ KHÓA & TÊN NGƯỜI ĐĂNG --- */
-
+/* --- 3. HIỂN THỊ & XÓA BÀI (MỚI) --- */
 async function renderGallery() {
     const latestContainer = document.getElementById('latest-container');
     const allContainer = document.getElementById('gallery-container');
     const sortValue = document.getElementById('sort-select').value;
     
     if (!currentUser) {
-        const lock = `<div style="text-align:center; padding:50px; grid-column:1/-1;">
-            <h2 style="color:#ef4444; font-size:3rem; margin-bottom:10px;"><i class="fa-solid fa-lock"></i></h2>
-            <h3>Nội dung bị khóa</h3>
-            <p>Vui lòng đăng nhập đúng tài khoản Khối ${currentGrade} để xem.</p>
-            <button class="btn-submit" style="width:auto; margin-top:15px; padding:10px 30px;" onclick="openModal('login')">Đăng nhập</button>
-        </div>`;
+        const lock = `<div style="text-align:center; padding:50px; grid-column:1/-1;"><h2 style="color:#ef4444; font-size:3rem;"><i class="fa-solid fa-lock"></i></h2><h3>Nội dung bị khóa</h3><p>Đăng nhập đúng tài khoản Khối ${currentGrade} để xem.</p><button class="btn-submit" style="width:auto; margin-top:15px; padding:10px 30px;" onclick="openModal('login')">Đăng nhập</button></div>`;
         latestContainer.innerHTML = ''; allContainer.innerHTML = lock; return;
     }
 
     latestContainer.innerHTML = '<p class="loading-text">Đang tải...</p>';
     allContainer.innerHTML = '<p class="loading-text">Đang tải...</p>';
-    
     const toolbar = document.getElementById('admin-toolbar');
     if (toolbar) toolbar.style.display = isAdmin ? 'flex' : 'none';
 
-    // 1. LẤY TẤT CẢ DATA CỦA LỚP ĐÓ (Không lọc theo uploader_id nữa)
-    // Để ta có thể hiển thị "Ổ khóa" cho bài của người khác
-    let query = db.from('media')
-        .select('*')
-        .eq('grade', currentGrade)
-        .eq('class_name', currentClass)
-        .eq('type', currentMediaType);
+    let query = db.from('media').select('*').eq('grade', currentGrade).eq('class_name', currentClass).eq('type', currentMediaType);
 
     try {
         const isAscending = sortValue === 'oldest';
         const { data: allData, error } = await query.order('created_at', { ascending: isAscending });
-        
         if (error) throw error;
 
-        // Lọc 24h
         const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
         const latestData = allData.filter(item => new Date(item.created_at) >= oneDayAgo);
         
         if (latestData.length === 0) latestContainer.innerHTML = '<p style="text-align:center;color:#999;grid-column:1/-1;font-style:italic;">Không có bài mới.</p>';
         else renderMediaItems(latestData, latestContainer);
 
-        if (allData.length === 0) allContainer.innerHTML = '<p style="text-align:center;color:#999;grid-column:1/-1">Lớp này chưa có tài liệu nào.</p>';
-        else {
-            galleryData = allData;
-            renderMediaItems(allData, allContainer, true);
-        }
-
+        if (allData.length === 0) allContainer.innerHTML = '<p style="text-align:center;color:#999;grid-column:1/-1">Chưa có tài liệu.</p>';
+        else { galleryData = allData; renderMediaItems(allData, allContainer, true); }
     } catch (e) { allContainer.innerHTML = `<p style="text-align:center;color:red;">Lỗi: ${e.message}</p>`; }
 }
 
@@ -226,267 +160,87 @@ function renderMediaItems(data, container, isMain = false) {
         div.className = 'media-item';
         div.setAttribute('data-id', item.id);
 
-        // LOGIC HIỂN THỊ NỘI DUNG (QUAN TRỌNG)
-        // 1. Admin thấy hết
-        // 2. Mục Teacher -> Ai cũng thấy
-        // 3. Mục Lớp -> Chỉ thấy bài của mình (isOwner), bài người khác bị khóa
-        
-        const isOwner = (item.uploader_id === currentUser.id);
+        const isOwner = (currentUser && item.uploader_id === currentUser.id);
         const isTeacherFolder = (currentClass === 'teacher');
         const canView = isAdmin || isTeacherFolder || isOwner;
-
-        let contentHTML = '';
-        let clickEvent = '';
-
-        // Tên người đăng (Lấy từ DB hoặc hiện Ẩn danh)
         const authorDisplay = item.author_name ? item.author_name : 'Học sinh';
 
-        if (canView) {
-            // ĐƯỢC XEM -> Hiện ảnh/video
-            let lbIndex = isMain ? index : galleryData.findIndex(x => x.id === item.id);
-            if(lbIndex === -1) lbIndex = 0;
-            
-            if (item.type === 'image') {
-                contentHTML = `<img src="${item.url}" class="media-content" loading="lazy">`;
-                clickEvent = `onclick="openLightbox(${lbIndex})"`;
-            } else {
-                contentHTML = `<video class="media-content" controls><source src="${item.url}"></video>`;
-            }
-        } else {
-            // KHÔNG ĐƯỢC XEM -> Hiện ổ khóa
-            contentHTML = `
-                <div class="locked-content">
-                    <i class="fa-solid fa-lock"></i>
-                    <span>Riêng tư</span>
-                </div>
-            `;
-            // Không có sự kiện click (hoặc click báo lỗi)
-            clickEvent = `onclick="alert('Bài đăng này của bạn ${authorDisplay}. Bạn không có quyền xem!')"`;
+        // 1. Logic xem nội dung
+        let contentHTML = canView 
+            ? (item.type === 'image' ? `<img src="${item.url}" class="media-content" loading="lazy">` : `<video class="media-content" controls><source src="${item.url}"></video>`)
+            : `<div class="locked-content"><i class="fa-solid fa-lock"></i><span>Riêng tư</span></div>`;
+        
+        let clickEvent = canView && item.type === 'image' 
+            ? `onclick="openLightbox(${isMain ? index : galleryData.findIndex(x => x.id === item.id)})"`
+            : `onclick="if(!${canView}) alert('Bài của bạn: ${authorDisplay}. Bạn không được xem!')"`;
+
+        // 2. Logic Checkbox Admin
+        let checkbox = isAdmin ? `<input type="checkbox" class="item-checkbox" value="${item.id}" onchange="toggleSelectItem('${item.id}')" ${selectedFileIds.includes(item.id)?'checked':''} style="display:block">` : '';
+        if(isAdmin && selectedFileIds.includes(item.id)) div.classList.add('selected');
+
+        // 3. LOGIC NÚT XÓA RIÊNG (CHO CHỦ SỞ HỮU HOẶC ADMIN)
+        let deleteBtn = '';
+        if (isAdmin || isOwner) {
+            // event.stopPropagation() để không kích hoạt click mở ảnh khi bấm xóa
+            deleteBtn = `<button class="btn-delete-item" onclick="event.stopPropagation(); deleteSingleItem('${item.id}', '${item.url}')" title="Xóa file này"><i class="fa-solid fa-trash"></i></button>`;
         }
 
-        // Checkbox Admin
-        let checkbox = '';
-        if (isAdmin) {
-            const checked = selectedFileIds.includes(item.id) ? 'checked' : '';
-            if(checked) div.classList.add('selected');
-            checkbox = `<input type="checkbox" class="item-checkbox" value="${item.id}" onchange="toggleSelectItem('${item.id}')" ${checked} style="display:block">`;
-        }
-
-        const date = new Date(item.created_at).toLocaleDateString('vi-VN');
-
-        div.innerHTML = `
-            ${checkbox}
-            <div ${clickEvent} style="cursor: ${canView ? 'pointer' : 'not-allowed'}">
-                ${contentHTML}
-            </div>
-            <div class="media-caption">
-                <div class="caption-title">${item.title}</div>
-                <div class="author-name"><i class="fa-solid fa-user-pen"></i> ${authorDisplay}</div>
-                <div class="caption-date">${date}</div>
-            </div>
-        `;
+        div.innerHTML = `${checkbox} ${deleteBtn} <div ${clickEvent} style="cursor:${canView?'pointer':'not-allowed'}">${contentHTML}</div><div class="media-caption"><div class="caption-title">${item.title}</div><div class="author-name"><i class="fa-solid fa-user-pen"></i> ${authorDisplay}</div><div class="caption-date">${new Date(item.created_at).toLocaleDateString('vi-VN')}</div></div>`;
         container.appendChild(div);
     });
 }
 
-/* --- CÁC HÀM CŨ GIỮ NGUYÊN --- */
-// (Login, Register, Logout, Navigation, Admin Delete, Lightbox...)
-// Bạn copy lại các hàm bên dưới từ phiên bản trước, chúng không thay đổi logic.
-
-/* --- 4. NAVIGATION --- */
-function updateURL(grade, className, type) {
-    const url = new URL(window.location);
-    url.searchParams.delete('grade'); url.searchParams.delete('class'); url.searchParams.delete('type');
-    if (grade) url.searchParams.set('grade', grade);
-    if (className) url.searchParams.set('class', className);
-    if (type) url.searchParams.set('type', type);
-    window.history.pushState({}, '', url);
-}
-
-function switchView(id) {
-    document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active-view'));
-    document.getElementById(id).classList.add('active-view');
-}
-
-function goToHome() {
-    currentGrade = 0; currentClass = ''; currentMediaType = '';
-    updateURL(); switchView('view-home');
-}
-
-function goToClassMenu(g) {
-    currentGrade = g;
-    updateURL(g);
-    document.getElementById('class-menu-title').innerText = `CHỌN LỚP - KHỐI ${g}`;
-    const container = document.getElementById('class-list-container');
-    container.innerHTML = '';
-    const teacherBtn = document.createElement('div');
-    teacherBtn.className = 'card-item class-card teacher-card';
-    teacherBtn.innerHTML = '<i class="fa-solid fa-chalkboard-user"></i> MỤC GIÁO VIÊN (Chỉ Admin đăng)';
-    teacherBtn.onclick = () => goToMediaType('teacher');
-    container.appendChild(teacherBtn);
-    for (let i = 1; i <= 15; i++) {
-        const className = `${g}/${i}`;
-        const btn = document.createElement('div');
-        btn.className = 'card-item class-card';
-        btn.innerText = `Lớp ${className}`;
-        btn.onclick = () => goToMediaType(className);
-        container.appendChild(btn);
-    }
-    switchView('view-class-menu');
-}
-
-function goToMediaType(className) {
-    currentClass = className;
-    updateURL(currentGrade, className);
-    const title = className === 'teacher' ? 'GIÁO VIÊN' : `LỚP ${className}`;
-    document.getElementById('type-menu-title').innerText = `${title} - KHỐI ${currentGrade}`;
-    switchView('view-media-type');
-}
-function backToClassMenu() { goToClassMenu(currentGrade); }
-
-function goToGallery(type) {
-    currentMediaType = type;
-    updateURL(currentGrade, currentClass, type);
-    const title = currentClass === 'teacher' ? 'GIÁO VIÊN' : `LỚP ${currentClass}`;
-    const typeTxt = type === 'image' ? 'HÌNH ẢNH' : 'VIDEO';
-    document.getElementById('gallery-page-title').innerText = `${typeTxt} | ${title}`;
+// --- HÀM XÓA 1 FILE (MỚI) ---
+async function deleteSingleItem(id, url) {
+    if(!confirm("Bạn có chắc chắn muốn xóa file này không?")) return;
     
-    let hint = "";
-    if (currentClass === 'teacher') hint = "Mục công khai. Chỉ Giáo viên đăng.";
-    else hint = "Khu vực lớp học. Ảnh của bạn khác sẽ bị khóa.";
-    document.getElementById('upload-hint-text').innerText = hint;
-
-    selectedFileIds = [];
-    document.getElementById('select-all-checkbox').checked = false;
-    document.getElementById('selected-count').innerText = '0';
-    renderGallery();
-    switchView('view-gallery');
-}
-function backToMediaType() { goToMediaType(currentClass); }
-
-/* --- LOGIN / LOGOUT --- */
-async function performLogin() {
-    const email = document.getElementById('login-user').value;
-    const pass = document.querySelector('#modal-login input[type="password"]').value;
-    if(!email || !pass) return alert("Nhập thiếu!");
-    const btn = document.querySelector('#modal-login .btn-submit');
-    const old = btn.innerText; btn.innerText="Đang xử lý..."; btn.disabled=true;
-    const { error } = await db.auth.signInWithPassword({ email, password: pass });
-    if(error) { alert(error.message); btn.innerText=old; btn.disabled=false; }
-    else closeModal('login');
-}
-async function logout() { if(confirm("Đăng xuất?")) { await db.auth.signOut(); window.location.reload(); } }
-async function performRegister() {
-    const email = document.getElementById('reg-email').value;
-    const pass = document.getElementById('reg-password').value;
-    const name = document.getElementById('reg-name').value;
-    const grade = document.getElementById('reg-grade').value;
-    if(!email || !pass) return alert("Thiếu thông tin");
-    const { error } = await db.auth.signUp({ email, password: pass, options: { data: { username: name, grade: parseInt(grade), role: 'user' } } });
-    if(error) alert(error.message); else { alert("Đăng ký thành công!"); switchModal('register','login'); }
-}
-
-/* --- ADMIN DELETE --- */
-function toggleSelectItem(id) {
-    const idx = selectedFileIds.indexOf(id);
-    if(idx > -1) selectedFileIds.splice(idx,1); else selectedFileIds.push(id);
-    const cbs = document.querySelectorAll(`.item-checkbox[value="${id}"]`);
-    cbs.forEach(cb => cb.checked = selectedFileIds.includes(id));
-    const divs = document.querySelectorAll(`.media-item[data-id="${id}"]`);
-    divs.forEach(d => selectedFileIds.includes(id) ? d.classList.add('selected') : d.classList.remove('selected'));
-    document.getElementById('selected-count').innerText = selectedFileIds.length;
-}
-function toggleSelectAll() {
-    const checked = document.getElementById('select-all-checkbox').checked;
-    selectedFileIds = [];
-    document.querySelectorAll('.item-checkbox').forEach(cb => {
-        cb.checked = checked;
-        if(checked) selectedFileIds.push(cb.value);
-    });
-    selectedFileIds = [...new Set(selectedFileIds)]; 
-    document.querySelectorAll('.media-item').forEach(d => checked ? d.classList.add('selected') : d.classList.remove('selected'));
-    document.getElementById('selected-count').innerText = selectedFileIds.length;
-}
-async function deleteSelectedItems() {
-    if (!selectedFileIds.length) return alert("Chưa chọn mục nào!");
-    if (!confirm("Xóa vĩnh viễn các mục đã chọn?")) return;
-    
-    const btn = document.querySelector('.btn-bulk-delete');
-    const oldHTML = btn.innerHTML; // Lưu lại giao diện cũ (gồm cả icon và số lượng)
-    
-    // Đổi nút thành trạng thái đang chạy
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xóa...'; 
-    btn.disabled = true;
+    // Tìm thẻ div để hiệu ứng loading (nếu thích)
+    const itemDiv = document.querySelector(`.media-item[data-id="${id}"]`);
+    if(itemDiv) itemDiv.style.opacity = '0.5';
 
     try {
-        // 1. Lấy danh sách URL để xóa file trong Storage
-        const { data: files } = await db.from('media').select('url').in('id', selectedFileIds);
-        const fileNames = files.map(f => f.url.split('/').pop());
-        
-        if(fileNames.length > 0) {
-            await db.storage.from('school_assets').remove(fileNames);
+        // 1. Xóa file trên Storage
+        const fileName = url.split('/').pop();
+        if (fileName) {
+            await db.storage.from('school_assets').remove([fileName]);
         }
-        
+
         // 2. Xóa dữ liệu trong Database
-        const { error } = await db.from('media').delete().in('id', selectedFileIds);
-        if(error) throw error;
-
-        // --- KHẮC PHỤC LỖI NULL TẠI ĐÂY ---
-        // Phải trả lại giao diện nút cũ TRƯỚC khi gán số 0
-        btn.innerHTML = oldHTML; 
-        btn.disabled = false;
-
-        // Bây giờ thẻ span id="selected-count" đã xuất hiện lại, ta mới cập nhật nó
-        const countSpan = document.getElementById('selected-count');
-        if (countSpan) countSpan.innerText = '0';
-
-        // Reset các ô checkbox
-        selectedFileIds = [];
-        const selectAll = document.getElementById('select-all-checkbox');
-        if (selectAll) selectAll.checked = false;
+        const { error } = await db.from('media').delete().eq('id', id);
+        
+        if (error) throw error;
 
         alert("Đã xóa thành công!");
-        renderGallery(); // Tải lại trang
+        renderGallery(); // Tải lại danh sách
 
-    } catch(e) { 
-        alert("Lỗi: " + e.message); 
-        // Nếu lỗi cũng phải trả lại nút cũ
-        btn.innerHTML = oldHTML; 
-        btn.disabled = false;
+    } catch (e) {
+        alert("Lỗi khi xóa: " + e.message);
+        if(itemDiv) itemDiv.style.opacity = '1';
     }
 }
 
+/* --- OTHER UTILS --- */
+async function performLogin() { const e=document.getElementById('login-user').value; const p=document.querySelector('#modal-login input[type="password"]').value; if(!e||!p)return alert("Thiếu thông tin"); const b=document.querySelector('#modal-login .btn-submit'); const o=b.innerText; b.innerText="Xử lý..."; b.disabled=true; const{error}=await db.auth.signInWithPassword({email:e,password:p}); if(error){alert(error.message);b.innerText=o;b.disabled=false}else closeModal('login'); }
+async function logout(){ if(confirm("Đăng xuất?")){await db.auth.signOut();window.location.reload();} }
+async function performRegister(){ const e=document.getElementById('reg-email').value; const p=document.getElementById('reg-password').value; const n=document.getElementById('reg-name').value; const g=document.getElementById('reg-grade').value; if(!e||!p)return alert("Thiếu thông tin"); const{error}=await db.auth.signUp({email:e,password:p,options:{data:{username:n,grade:parseInt(g),role:'user'}}}); if(error)alert(error.message);else{alert("Đăng ký thành công");switchModal('register','login');} }
+function toggleSelectItem(id){ const i=selectedFileIds.indexOf(id); if(i>-1)selectedFileIds.splice(i,1); else selectedFileIds.push(id); document.querySelectorAll(`.item-checkbox[value="${id}"]`).forEach(c=>c.checked=selectedFileIds.includes(id)); document.querySelectorAll(`.media-item[data-id="${id}"]`).forEach(d=>selectedFileIds.includes(id)?d.classList.add('selected'):d.classList.remove('selected')); document.getElementById('selected-count').innerText=selectedFileIds.length; }
+function toggleSelectAll(){ const c=document.getElementById('select-all-checkbox').checked; selectedFileIds=[]; document.querySelectorAll('.item-checkbox').forEach(cb=>{cb.checked=c;if(c)selectedFileIds.push(cb.value)}); selectedFileIds=[...new Set(selectedFileIds)]; document.querySelectorAll('.media-item').forEach(d=>c?d.classList.add('selected'):d.classList.remove('selected')); document.getElementById('selected-count').innerText=selectedFileIds.length; }
+async function deleteSelectedItems(){ if(!selectedFileIds.length)return alert("Chưa chọn!"); if(!confirm("Xóa các mục đã chọn?"))return; const b=document.querySelector('.btn-bulk-delete'); const o=b.innerHTML; b.innerHTML='Xóa...'; b.disabled=true; try{ const{data:f}=await db.from('media').select('url').in('id',selectedFileIds); const n=f.map(x=>x.url.split('/').pop()); if(n.length)await db.storage.from('school_assets').remove(n); await db.from('media').delete().in('id',selectedFileIds); b.innerHTML=o; b.disabled=false; selectedFileIds=[]; if(document.getElementById('selected-count')) document.getElementById('selected-count').innerText=0; if(document.getElementById('select-all-checkbox')) document.getElementById('select-all-checkbox').checked=false; alert("Đã xóa"); renderGallery(); } catch(e){ alert(e.message); b.innerHTML=o; b.disabled=false; } }
+/* --- NAVIGATION --- */
+function goToHome() { currentGrade = 0; currentClass = ''; currentMediaType = ''; updateURL(); switchView('view-home'); }
+function goToClassMenu(g) { currentGrade = parseInt(g); updateURL(g); document.getElementById('class-menu-title').innerText = `CHỌN LỚP - KHỐI ${g}`; const container = document.getElementById('class-list-container'); container.innerHTML = ''; const teacherBtn = document.createElement('div'); teacherBtn.className = 'card-item class-card teacher-card'; teacherBtn.innerHTML = '<i class="fa-solid fa-chalkboard-user"></i> MỤC GIÁO VIÊN (Chỉ Admin đăng)'; teacherBtn.onclick = () => goToMediaType('teacher'); container.appendChild(teacherBtn); for (let i = 1; i <= 15; i++) { const c = `${g}/${i}`; const btn = document.createElement('div'); btn.className = 'card-item class-card'; btn.innerText = `Lớp ${c}`; btn.onclick = () => goToMediaType(c); container.appendChild(btn); } switchView('view-class-menu'); }
+function goToMediaType(c) { currentClass = c; updateURL(currentGrade, c); document.getElementById('type-menu-title').innerText = `${c==='teacher'?'GIÁO VIÊN':`LỚP ${c}`} - KHỐI ${currentGrade}`; switchView('view-media-type'); }
+function backToClassMenu() { goToClassMenu(currentGrade); }
+function goToGallery(t) { currentMediaType = t; updateURL(currentGrade, currentClass, t); const title = currentClass === 'teacher' ? 'GIÁO VIÊN' : `LỚP ${currentClass}`; document.getElementById('gallery-page-title').innerText = `${t==='image'?'HÌNH ẢNH':'VIDEO'} | ${title}`; let hint = ""; if (currentClass === 'teacher') hint = "Mục công khai. Chỉ Giáo viên đăng."; else hint = "Khu vực lớp học. Ảnh của bạn khác sẽ bị khóa."; document.getElementById('upload-hint-text').innerText = hint; selectedFileIds = []; if(document.getElementById('select-all-checkbox')) document.getElementById('select-all-checkbox').checked = false; if(document.getElementById('selected-count')) document.getElementById('selected-count').innerText = '0'; renderGallery(); switchView('view-gallery'); }
+function backToMediaType() { goToMediaType(currentClass); }
+function switchView(id) { document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active-view')); document.getElementById(id).classList.add('active-view'); }
+function updateURL(g, c, t) { const u = new URL(window.location); u.searchParams.delete('grade'); u.searchParams.delete('class'); u.searchParams.delete('type'); if(g) u.searchParams.set('grade', g); if(c) u.searchParams.set('class', c); if(t) u.searchParams.set('type', t); window.history.pushState({}, '', u); }
+function loadStateFromURL() { const p = new URLSearchParams(window.location.search); const g = p.get('grade'); const c = p.get('class'); const t = p.get('type'); if (g && c && t) { currentGrade = parseInt(g); currentClass = c; goToGallery(t); } else if (g && c) { currentGrade = parseInt(g); goToMediaType(c); } else if (g) { goToClassMenu(parseInt(g)); } else goToHome(); }
 /* --- LIGHTBOX --- */
-function openLightbox(i) {
-    currentImageIndex = i;
-    document.getElementById('lightbox-modal').style.display='block';
-    const item = galleryData[i];
-    document.getElementById('lightbox-img').src = item.url;
-    document.getElementById('lightbox-caption').innerText = item.title;
-}
-function closeLightbox() { document.getElementById('lightbox-modal').style.display='none'; }
-function changeSlide(n) {
-    currentImageIndex += n;
-    if(currentImageIndex >= galleryData.length) currentImageIndex = 0;
-    if(currentImageIndex < 0) currentImageIndex = galleryData.length-1;
-    // Bỏ qua item bị khóa (không phải image/video hoặc url rỗng)
-    // Nhưng logic render chỉ cho phép mở lightbox nếu canView, nên data trong galleryData là chuẩn
-    const item = galleryData[currentImageIndex];
-    document.getElementById('lightbox-img').src = item.url;
-    document.getElementById('lightbox-caption').innerText = item.title;
-}
-
-function openModal(t) { document.getElementById(`modal-${t}`).style.display = 'flex'; }
-function closeModal(t) { document.getElementById(`modal-${t}`).style.display = 'none'; }
-function switchModal(f, t) { closeModal(f); openModal(t); }
-window.onclick = e => { if(e.target.classList.contains('modal-overlay')) e.target.style.display='none'; if(e.target.id==='lightbox-modal') closeLightbox(); }
-function loadStateFromURL() {
-    const p = new URLSearchParams(window.location.search);
-    const g = p.get('grade'); const c = p.get('class'); const t = p.get('type');
-    if (g && c && t) { currentGrade = parseInt(g); currentClass = c; goToGallery(t); }
-    else if (g && c) { currentGrade = parseInt(g); goToMediaType(c); }
-    else if (g) { goToClassMenu(parseInt(g)); }
-    else goToHome();
-}
-
-
+function openLightbox(i){ currentImageIndex=i; document.getElementById('lightbox-modal').style.display='block'; const t=galleryData[i]; document.getElementById('lightbox-img').src=t.url; document.getElementById('lightbox-caption').innerText=t.title; }
+function closeLightbox(){ document.getElementById('lightbox-modal').style.display='none'; }
+function changeSlide(n){ currentImageIndex+=n; if(currentImageIndex>=galleryData.length)currentImageIndex=0; if(currentImageIndex<0)currentImageIndex=galleryData.length-1; const t=galleryData[currentImageIndex]; document.getElementById('lightbox-img').src=t.url; document.getElementById('lightbox-caption').innerText=t.title; }
+function openModal(t){ document.getElementById(`modal-${t}`).style.display='flex'; }
+function closeModal(t){ document.getElementById(`modal-${t}`).style.display='none'; }
+function switchModal(f,t){ closeModal(f); openModal(t); }
+window.onclick=e=>{ if(e.target.classList.contains('modal-overlay'))e.target.style.display='none'; if(e.target.id==='lightbox-modal')closeLightbox(); }
