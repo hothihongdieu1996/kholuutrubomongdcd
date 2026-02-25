@@ -1,5 +1,5 @@
 /* =========================================
-   SCRIPT.JS - PHIÊN BẢN HỌC SINH TỰ XÓA BÀI
+   SCRIPT.JS - PHIÊN BẢN PHÂN QUYỀN KHỐI (GIÁO VIÊN)
    ========================================= */
 
 // ⚠️ THAY API CỦA BẠN VÀO ĐÂY
@@ -77,7 +77,7 @@ function triggerUpload() {
     if (!currentUser) return alert("Vui lòng đăng nhập!");
     if (isAdmin) { document.getElementById('file-input').click(); return; }
     if (parseInt(currentUser.grade) !== parseInt(currentGrade)) {
-        return alert(`Sai khối! Bạn là HS Khối ${currentUser.grade}, không được đăng vào Khối ${currentGrade}.`);
+        return alert(`CẢNH BÁO: Bạn là HS Khối ${currentUser.grade}, không được đăng vào Khối ${currentGrade}.`);
     }
     document.getElementById('file-input').click(); 
 }
@@ -85,7 +85,7 @@ function triggerUpload() {
 async function handleFileUpload(input) {
     if (!input.files || input.files.length === 0) return;
     if (!isAdmin && parseInt(currentUser.grade) !== parseInt(currentGrade)) {
-        alert("Sai khối lớp!"); input.value = ''; return;
+        alert("Sai khối lớp! Hủy tải lên."); input.value = ''; return;
     }
     if (currentClass === 'teacher' && !isAdmin) {
         alert("Chỉ Giáo viên mới được đăng mục này!"); input.value = ''; return;
@@ -119,14 +119,14 @@ async function handleFileUpload(input) {
     renderGallery();
 }
 
-/* --- 3. HIỂN THỊ & XÓA BÀI (MỚI) --- */
+/* --- 3. HIỂN THỊ & LOGIC PHÂN QUYỀN (MỚI) --- */
 async function renderGallery() {
     const latestContainer = document.getElementById('latest-container');
     const allContainer = document.getElementById('gallery-container');
     const sortValue = document.getElementById('sort-select').value;
     
     if (!currentUser) {
-        const lock = `<div style="text-align:center; padding:50px; grid-column:1/-1;"><h2 style="color:#ef4444; font-size:3rem;"><i class="fa-solid fa-lock"></i></h2><h3>Nội dung bị khóa</h3><p>Đăng nhập đúng tài khoản Khối ${currentGrade} để xem.</p><button class="btn-submit" style="width:auto; margin-top:15px; padding:10px 30px;" onclick="openModal('login')">Đăng nhập</button></div>`;
+        const lock = `<div style="text-align:center; padding:50px; grid-column:1/-1;"><h2 style="color:#ef4444; font-size:3rem;"><i class="fa-solid fa-lock"></i></h2><h3>Nội dung bị khóa</h3><p>Vui lòng đăng nhập để xem.</p><button class="btn-submit" style="width:auto; margin-top:15px; padding:10px 30px;" onclick="openModal('login')">Đăng nhập</button></div>`;
         latestContainer.innerHTML = ''; allContainer.innerHTML = lock; return;
     }
 
@@ -162,26 +162,42 @@ function renderMediaItems(data, container, isMain = false) {
 
         const isOwner = (currentUser && item.uploader_id === currentUser.id);
         const isTeacherFolder = (currentClass === 'teacher');
-        const canView = isAdmin || isTeacherFolder || isOwner;
+        
+        // --- LOGIC PHÂN QUYỀN MỚI ---
+        let canView = false;
+
+        if (isAdmin) {
+            // 1. Admin xem hết
+            canView = true;
+        } else if (isTeacherFolder) {
+            // 2. Mục Giáo Viên: Chỉ được xem nếu CÙNG KHỐI
+            // (HS Khối 7 xem mục Giáo viên Khối 6 -> item.grade=6, user.grade=7 -> Sai -> Khóa)
+            if (parseInt(currentUser.grade) === parseInt(item.grade)) {
+                canView = true;
+            }
+        } else {
+            // 3. Mục Lớp học: Chỉ xem bài của chính mình
+            if (isOwner) {
+                canView = true;
+            }
+        }
+        // -----------------------------
+
         const authorDisplay = item.author_name ? item.author_name : 'Học sinh';
 
-        // 1. Logic xem nội dung
         let contentHTML = canView 
             ? (item.type === 'image' ? `<img src="${item.url}" class="media-content" loading="lazy">` : `<video class="media-content" controls><source src="${item.url}"></video>`)
-            : `<div class="locked-content"><i class="fa-solid fa-lock"></i><span>Riêng tư</span></div>`;
+            : `<div class="locked-content"><i class="fa-solid fa-lock"></i><span>Riêng tư / Khác khối</span></div>`;
         
         let clickEvent = canView && item.type === 'image' 
             ? `onclick="openLightbox(${isMain ? index : galleryData.findIndex(x => x.id === item.id)})"`
-            : `onclick="if(!${canView}) alert('Bài của bạn: ${authorDisplay}. Bạn không được xem!')"`;
+            : `onclick="if(!${canView}) alert('Bạn không có quyền xem bài này (Khác khối hoặc không phải của bạn)!')"`;
 
-        // 2. Logic Checkbox Admin
         let checkbox = isAdmin ? `<input type="checkbox" class="item-checkbox" value="${item.id}" onchange="toggleSelectItem('${item.id}')" ${selectedFileIds.includes(item.id)?'checked':''} style="display:block">` : '';
         if(isAdmin && selectedFileIds.includes(item.id)) div.classList.add('selected');
 
-        // 3. LOGIC NÚT XÓA RIÊNG (CHO CHỦ SỞ HỮU HOẶC ADMIN)
         let deleteBtn = '';
         if (isAdmin || isOwner) {
-            // event.stopPropagation() để không kích hoạt click mở ảnh khi bấm xóa
             deleteBtn = `<button class="btn-delete-item" onclick="event.stopPropagation(); deleteSingleItem('${item.id}', '${item.url}')" title="Xóa file này"><i class="fa-solid fa-trash"></i></button>`;
         }
 
@@ -190,32 +206,19 @@ function renderMediaItems(data, container, isMain = false) {
     });
 }
 
-// --- HÀM XÓA 1 FILE (MỚI) ---
+// --- HÀM XÓA 1 FILE ---
 async function deleteSingleItem(id, url) {
     if(!confirm("Bạn có chắc chắn muốn xóa file này không?")) return;
-    
-    // Tìm thẻ div để hiệu ứng loading (nếu thích)
     const itemDiv = document.querySelector(`.media-item[data-id="${id}"]`);
     if(itemDiv) itemDiv.style.opacity = '0.5';
-
     try {
-        // 1. Xóa file trên Storage
         const fileName = url.split('/').pop();
-        if (fileName) {
-            await db.storage.from('school_assets').remove([fileName]);
-        }
-
-        // 2. Xóa dữ liệu trong Database
+        if (fileName) await db.storage.from('school_assets').remove([fileName]);
         const { error } = await db.from('media').delete().eq('id', id);
-        
         if (error) throw error;
-
-        alert("Đã xóa thành công!");
-        renderGallery(); // Tải lại danh sách
-
+        alert("Đã xóa thành công!"); renderGallery();
     } catch (e) {
-        alert("Lỗi khi xóa: " + e.message);
-        if(itemDiv) itemDiv.style.opacity = '1';
+        alert("Lỗi khi xóa: " + e.message); if(itemDiv) itemDiv.style.opacity = '1';
     }
 }
 
