@@ -1,5 +1,5 @@
 /* =========================================
-   SCRIPT.JS - PHIÊN BẢN PHÂN QUYỀN KHỐI (GIÁO VIÊN)
+   SCRIPT.JS - PHIÊN BẢN CHO PHÉP LƯU TRỐNG ĐIỂM
    ========================================= */
 
 // ⚠️ THAY API CỦA BẠN VÀO ĐÂY
@@ -57,7 +57,9 @@ async function fetchUserProfile() {
             currentUser.role = profile.role;
             if (profile.role === 'admin') isAdmin = true;
         }
+        // 👇 THAY EMAIL ADMIN CỦA BẠN VÀO ĐÂY 👇
         if (currentUser.email === 'admin@gmail.com') { isAdmin = true; currentUser.role = 'admin'; }
+        
         const suffix = isAdmin ? ' (Admin)' : ` (HS Khối ${currentUser.grade || '?'})`;
         document.getElementById('user-name-display').innerText = (currentUser.username || 'User') + suffix;
     } catch (e) { console.error("Lỗi profile:", e); }
@@ -109,7 +111,8 @@ async function handleFileUpload(input) {
             const { data } = db.storage.from('school_assets').getPublicUrl(name);
             await db.from('media').insert({
                 title: file.name, url: data.publicUrl, type: currentMediaType,
-                grade: currentGrade, class_name: currentClass, uploader_id: currentUser.id, author_name: authorName
+                grade: currentGrade, class_name: currentClass, 
+                uploader_id: currentUser.id, author_name: authorName
             });
             successCount++;
         } catch(e) { console.error(e); }
@@ -119,14 +122,14 @@ async function handleFileUpload(input) {
     renderGallery();
 }
 
-/* --- 3. HIỂN THỊ & LOGIC PHÂN QUYỀN (MỚI) --- */
+/* --- 3. HIỂN THỊ, SỬA & CHẤM ĐIỂM --- */
 async function renderGallery() {
     const latestContainer = document.getElementById('latest-container');
     const allContainer = document.getElementById('gallery-container');
     const sortValue = document.getElementById('sort-select').value;
     
     if (!currentUser) {
-        const lock = `<div style="text-align:center; padding:50px; grid-column:1/-1;"><h2 style="color:#ef4444; font-size:3rem;"><i class="fa-solid fa-lock"></i></h2><h3>Nội dung bị khóa</h3><p>Vui lòng đăng nhập để xem.</p><button class="btn-submit" style="width:auto; margin-top:15px; padding:10px 30px;" onclick="openModal('login')">Đăng nhập</button></div>`;
+        const lock = `<div style="text-align:center; padding:50px; grid-column:1/-1;"><h2 style="color:#ef4444; font-size:3rem;"><i class="fa-solid fa-lock"></i></h2><h3>Nội dung bị khóa</h3><p>Đăng nhập đúng tài khoản Khối ${currentGrade} để xem.</p><button class="btn-submit" style="width:auto; margin-top:15px; padding:10px 30px;" onclick="openModal('login')">Đăng nhập</button></div>`;
         latestContainer.innerHTML = ''; allContainer.innerHTML = lock; return;
     }
 
@@ -163,52 +166,103 @@ function renderMediaItems(data, container, isMain = false) {
         const isOwner = (currentUser && item.uploader_id === currentUser.id);
         const isTeacherFolder = (currentClass === 'teacher');
         
-        // --- LOGIC PHÂN QUYỀN MỚI ---
         let canView = false;
-
-        if (isAdmin) {
-            // 1. Admin xem hết
-            canView = true;
-        } else if (isTeacherFolder) {
-            // 2. Mục Giáo Viên: Chỉ được xem nếu CÙNG KHỐI
-            // (HS Khối 7 xem mục Giáo viên Khối 6 -> item.grade=6, user.grade=7 -> Sai -> Khóa)
-            if (parseInt(currentUser.grade) === parseInt(item.grade)) {
-                canView = true;
-            }
+        if (isAdmin) canView = true;
+        else if (isTeacherFolder) {
+            if (parseInt(currentUser.grade) === parseInt(item.grade)) canView = true;
         } else {
-            // 3. Mục Lớp học: Chỉ xem bài của chính mình
-            if (isOwner) {
-                canView = true;
-            }
+            if (isOwner) canView = true;
         }
-        // -----------------------------
 
         const authorDisplay = item.author_name ? item.author_name : 'Học sinh';
 
         let contentHTML = canView 
             ? (item.type === 'image' ? `<img src="${item.url}" class="media-content" loading="lazy">` : `<video class="media-content" controls><source src="${item.url}"></video>`)
-            : `<div class="locked-content"><i class="fa-solid fa-lock"></i><span>Riêng tư / Khác khối</span></div>`;
+            : `<div class="locked-content"><i class="fa-solid fa-lock"></i><span>Riêng tư</span></div>`;
         
         let clickEvent = canView && item.type === 'image' 
             ? `onclick="openLightbox(${isMain ? index : galleryData.findIndex(x => x.id === item.id)})"`
-            : `onclick="if(!${canView}) alert('Bạn không có quyền xem bài này (Khác khối hoặc không phải của bạn)!')"`;
+            : `onclick="if(!${canView}) alert('Bạn không có quyền xem bài này!')"`;
 
         let checkbox = isAdmin ? `<input type="checkbox" class="item-checkbox" value="${item.id}" onchange="toggleSelectItem('${item.id}')" ${selectedFileIds.includes(item.id)?'checked':''} style="display:block">` : '';
         if(isAdmin && selectedFileIds.includes(item.id)) div.classList.add('selected');
 
-        let deleteBtn = '';
+        let actionBtns = '';
         if (isAdmin || isOwner) {
-            deleteBtn = `<button class="btn-delete-item" onclick="event.stopPropagation(); deleteSingleItem('${item.id}', '${item.url}')" title="Xóa file này"><i class="fa-solid fa-trash"></i></button>`;
+            actionBtns = `
+                <button class="btn-edit-item" onclick="event.stopPropagation(); renameMediaItem('${item.id}', '${item.title}')" title="Sửa tên"><i class="fa-solid fa-pen"></i></button>
+                <button class="btn-delete-item" onclick="event.stopPropagation(); deleteSingleItem('${item.id}', '${item.url}')" title="Xóa"><i class="fa-solid fa-trash"></i></button>
+            `;
         }
 
-        div.innerHTML = `${checkbox} ${deleteBtn} <div ${clickEvent} style="cursor:${canView?'pointer':'not-allowed'}">${contentHTML}</div><div class="media-caption"><div class="caption-title">${item.title}</div><div class="author-name"><i class="fa-solid fa-user-pen"></i> ${authorDisplay}</div><div class="caption-date">${new Date(item.created_at).toLocaleDateString('vi-VN')}</div></div>`;
+        let gradingHTML = '';
+        if (isAdmin) {
+            const oldScore = item.score || '';
+            const oldComment = item.teacher_comment || '';
+            gradingHTML = `
+                <div class="grading-area" onclick="event.stopPropagation();">
+                    <div class="grading-row">
+                        <input type="text" id="score-${item.id}" class="input-score" placeholder="Điểm" value="${oldScore}">
+                        <input type="text" id="comment-${item.id}" class="input-comment" placeholder="Lời phê..." value="${oldComment}">
+                    </div>
+                    <button class="btn-save-grade" onclick="saveGrade('${item.id}')">Lưu đánh giá</button>
+                </div>
+            `;
+        } else if (item.score || item.teacher_comment) {
+            gradingHTML = `
+                <div class="grade-result">
+                    <span class="grade-score">Điểm: ${item.score || '--'}</span>
+                    <span class="grade-comment">"${item.teacher_comment || ''}"</span>
+                </div>
+            `;
+        }
+
+        div.innerHTML = `
+            ${checkbox} ${actionBtns}
+            <div ${clickEvent} style="cursor:${canView?'pointer':'not-allowed'}">${contentHTML}</div>
+            <div class="media-caption">
+                <div class="caption-title" id="title-${item.id}">${item.title}</div>
+                <div class="author-name"><i class="fa-solid fa-user-pen"></i> ${authorDisplay}</div>
+                <div class="caption-date">${new Date(item.created_at).toLocaleDateString('vi-VN')}</div>
+            </div>
+            ${gradingHTML} 
+        `;
         container.appendChild(div);
     });
 }
 
-// --- HÀM XÓA 1 FILE ---
+// --- HÀM ĐỔI TÊN ---
+async function renameMediaItem(id, oldTitle) {
+    const newTitle = prompt("Nhập tên mới:", oldTitle);
+    if (!newTitle || newTitle === oldTitle) return;
+    try {
+        const { error } = await db.from('media').update({ title: newTitle }).eq('id', id);
+        if (error) throw error;
+        const titleEl = document.getElementById(`title-${id}`);
+        if (titleEl) titleEl.innerText = newTitle;
+        alert("Đã đổi tên!");
+    } catch (e) { alert("Lỗi đổi tên: " + e.message); }
+}
+
+// --- HÀM LƯU ĐIỂM (ĐÃ BỎ CHECK RỖNG - CHO PHÉP LƯU TRỐNG) ---
+async function saveGrade(id) {
+    const scoreVal = document.getElementById(`score-${id}`).value;
+    const commentVal = document.getElementById(`comment-${id}`).value;
+    
+    // Đã bỏ dòng kiểm tra !scoreVal && !commentVal để cho phép xóa điểm
+    
+    const btn = document.querySelector(`.media-item[data-id="${id}"] .btn-save-grade`);
+    const oldText = btn.innerText; btn.innerText = "Lưu..."; btn.disabled = true;
+    try {
+        const { error } = await db.from('media').update({ score: scoreVal, teacher_comment: commentVal }).eq('id', id);
+        if (error) throw error;
+        alert("Đã lưu đánh giá!");
+    } catch (e) { alert("Lỗi: " + e.message); } finally { btn.innerText = oldText; btn.disabled = false; }
+}
+
+// --- HÀM XÓA ---
 async function deleteSingleItem(id, url) {
-    if(!confirm("Bạn có chắc chắn muốn xóa file này không?")) return;
+    if(!confirm("Xóa vĩnh viễn?")) return;
     const itemDiv = document.querySelector(`.media-item[data-id="${id}"]`);
     if(itemDiv) itemDiv.style.opacity = '0.5';
     try {
@@ -216,10 +270,8 @@ async function deleteSingleItem(id, url) {
         if (fileName) await db.storage.from('school_assets').remove([fileName]);
         const { error } = await db.from('media').delete().eq('id', id);
         if (error) throw error;
-        alert("Đã xóa thành công!"); renderGallery();
-    } catch (e) {
-        alert("Lỗi khi xóa: " + e.message); if(itemDiv) itemDiv.style.opacity = '1';
-    }
+        alert("Đã xóa!"); renderGallery();
+    } catch (e) { alert("Lỗi: " + e.message); if(itemDiv) itemDiv.style.opacity = '1'; }
 }
 
 /* --- OTHER UTILS --- */
