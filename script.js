@@ -57,9 +57,7 @@ async function fetchUserProfile() {
             currentUser.role = profile.role;
             if (profile.role === 'admin') isAdmin = true;
         }
-        // 👇 THAY EMAIL ADMIN CỦA BẠN VÀO ĐÂY 👇
-        if (currentUser.email === 'admin@gmail.com') { isAdmin = true; currentUser.role = 'admin'; }
-        
+
         const suffix = isAdmin ? ' (Admin)' : ` (HS Khối ${currentUser.grade || '?'})`;
         document.getElementById('user-name-display').innerText = (currentUser.username || 'User') + suffix;
     } catch (e) { console.error("Lỗi profile:", e); }
@@ -299,3 +297,4 @@ function openModal(t){ document.getElementById(`modal-${t}`).style.display='flex
 function closeModal(t){ document.getElementById(`modal-${t}`).style.display='none'; }
 function switchModal(f,t){ closeModal(f); openModal(t); }
 window.onclick=e=>{ if(e.target.classList.contains('modal-overlay'))e.target.style.display='none'; if(e.target.id==='lightbox-modal')closeLightbox(); }
+
