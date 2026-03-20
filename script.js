@@ -103,7 +103,17 @@ async function handleFileUpload(input) {
         btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Tải ${i+1}/${files.length}...`;
         try {
             const file = files[i];
-            const name = `${Date.now()}_${i}_${file.name.replace(/\s/g,'_')}`;
+            // Bước 1: Loại bỏ dấu tiếng Việt (Ví dụ: "Học sinh.jpg" -> "Hoc sinh.jpg")
+            let safeName = file.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            
+            // Bước 2: Giữ lại đuôi file, biến tất cả các ký tự không phải là Chữ/Số thành dấu gạch dưới "_"
+            safeName = safeName.replace(/[^a-zA-Z0-9.]/g, '_');
+            
+            // Bước 3: Đảm bảo không có 2 dấu gạch dưới nằm cạnh nhau gây xấu tên
+            safeName = safeName.replace(/__+/g, '_');
+            
+            // Chốt tên cuối cùng đẩy lên server
+            const name = `${Date.now()}_${i}_${safeName}`;
             const { error: upErr } = await db.storage.from('school_assets').upload(name, file);
             if(upErr) throw upErr;
             const { data } = db.storage.from('school_assets').getPublicUrl(name);
